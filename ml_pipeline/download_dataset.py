@@ -1,5 +1,5 @@
 """
-Download Driver Drowsiness Dataset using kagglehub
+Download UTA-RLDD (UTA Real-Life Drowsiness Dataset) using kagglehub
 """
 import kagglehub
 import shutil
@@ -8,18 +8,23 @@ import config
 
 def download_dataset():
     """
-    Download the Driver Drowsiness Dataset (DDD) from Kaggle
+    Download the UTA-RLDD Dataset from Kaggle
+    
+    This dataset contains 3 classes:
+    - Alert (label 0): Completely conscious
+    - Low Vigilant (label 5): Some signs of sleepiness  
+    - Drowsy (label 10): Actively trying not to fall asleep
     
     Returns:
         Path to dataset directory
     """
     print("\n" + "="*60)
-    print("Downloading Driver Drowsiness Dataset (DDD)")
+    print("Downloading UTA-RLDD (Real-Life Drowsiness Dataset)")
     print("="*60 + "\n")
     
     # Download dataset using kagglehub
     print("📥 Downloading from Kaggle...")
-    dataset_path = kagglehub.dataset_download("ismailnasri20/driver-drowsiness-dataset-ddd")
+    dataset_path = kagglehub.dataset_download("minhngt02/uta-rldd")
     
     print(f"✓ Dataset downloaded to: {dataset_path}")
     
@@ -42,56 +47,71 @@ def download_dataset():
         print(f"Creating {expected_structure}...")
         expected_structure.mkdir(parents=True, exist_ok=True)
     
-    # Check for Drowsy and Non Drowsy folders
+    # Check for Alert, Low Vigilant, and Drowsy folders
+    alert_source = dataset_dir / "Alert"
+    low_vigilant_source = dataset_dir / "Low_Vigilant"
     drowsy_source = dataset_dir / "Drowsy"
-    non_drowsy_source = dataset_dir / "Non Drowsy"
     
-    # Also check if they're in a subdirectory
-    if not drowsy_source.exists():
-        # Try to find them in subdirectories
-        subdirs = [d for d in dataset_dir.rglob("Drowsy") if d.is_dir()]
-        if subdirs:
-            drowsy_source = subdirs[0]
-            non_drowsy_source = drowsy_source.parent / "Non Drowsy"
+    # Also check alternative naming conventions
+    if not alert_source.exists():
+        # Try to find them in subdirectories or with different names
+        alert_candidates = list(dataset_dir.rglob("*alert*")) + list(dataset_dir.rglob("*Alert*"))
+        low_vigilant_candidates = list(dataset_dir.rglob("*low*vigilant*")) + list(dataset_dir.rglob("*Low*Vigilant*"))
+        drowsy_candidates = list(dataset_dir.rglob("*drowsy*")) + list(dataset_dir.rglob("*Drowsy*"))
+        
+        if alert_candidates:
+            alert_source = [d for d in alert_candidates if d.is_dir()][0]
+        if low_vigilant_candidates:
+            low_vigilant_source = [d for d in low_vigilant_candidates if d.is_dir()][0]
+        if drowsy_candidates:
+            drowsy_source = [d for d in drowsy_candidates if d.is_dir()][0]
             print(f"Found dataset in subdirectory: {drowsy_source.parent}")
     
     # Copy or create symlinks to ml_pipeline/data/
+    alert_dest = config.ALERT_DIR
+    low_vigilant_dest = config.LOW_VIGILANT_DIR
     drowsy_dest = config.DROWSY_DIR
-    non_drowsy_dest = config.NON_DROWSY_DIR
     
-    if drowsy_source.exists() and non_drowsy_source.exists():
+    if alert_source.exists() and low_vigilant_source.exists() and drowsy_source.exists():
         print(f"\n📋 Dataset structure found:")
+        print(f"  • Alert: {len(list(alert_source.glob('*')))} images")
+        print(f"  • Low Vigilant: {len(list(low_vigilant_source.glob('*')))} images")
         print(f"  • Drowsy: {len(list(drowsy_source.glob('*')))} images")
-        print(f"  • Non Drowsy: {len(list(non_drowsy_source.glob('*')))} images")
         
         # Option 1: Create symbolic links (faster, no duplication)
         print(f"\n🔗 Creating symbolic links in {config.DATA_DIR}...")
         
+        if alert_dest.exists():
+            alert_dest.unlink() if alert_dest.is_symlink() else shutil.rmtree(alert_dest)
+        if low_vigilant_dest.exists():
+            low_vigilant_dest.unlink() if low_vigilant_dest.is_symlink() else shutil.rmtree(low_vigilant_dest)
         if drowsy_dest.exists():
             drowsy_dest.unlink() if drowsy_dest.is_symlink() else shutil.rmtree(drowsy_dest)
-        if non_drowsy_dest.exists():
-            non_drowsy_dest.unlink() if non_drowsy_dest.is_symlink() else shutil.rmtree(non_drowsy_dest)
         
         try:
+            alert_dest.symlink_to(alert_source.resolve(), target_is_directory=True)
+            low_vigilant_dest.symlink_to(low_vigilant_source.resolve(), target_is_directory=True)
             drowsy_dest.symlink_to(drowsy_source.resolve(), target_is_directory=True)
-            non_drowsy_dest.symlink_to(non_drowsy_source.resolve(), target_is_directory=True)
             print("✓ Symbolic links created successfully")
         except OSError:
             # If symlinks fail (Windows without admin), copy instead
             print("⚠ Symbolic links failed, copying files instead...")
             print("  (This may take a few minutes)")
             
+            if alert_dest.exists():
+                shutil.rmtree(alert_dest)
+            if low_vigilant_dest.exists():
+                shutil.rmtree(low_vigilant_dest)
             if drowsy_dest.exists():
                 shutil.rmtree(drowsy_dest)
-            if non_drowsy_dest.exists():
-                shutil.rmtree(non_drowsy_dest)
             
+            shutil.copytree(alert_source, alert_dest)
+            shutil.copytree(low_vigilant_source, low_vigilant_dest)
             shutil.copytree(drowsy_source, drowsy_dest)
-            shutil.copytree(non_drowsy_source, non_drowsy_dest)
             print("✓ Files copied successfully")
     else:
         print(f"\n⚠ Warning: Expected folder structure not found")
-        print(f"  Expected: Drowsy/ and Non Drowsy/ folders")
+        print(f"  Expected: Alert/, Low_Vigilant/, and Drowsy/ folders")
         print(f"  You may need to manually organize the dataset")
         print(f"\n  Dataset location: {dataset_path}")
         return dataset_path
@@ -100,8 +120,9 @@ def download_dataset():
     print("✓ Dataset ready!")
     print("="*60)
     print(f"\nDataset location: {config.DATA_DIR}")
+    print(f"  • {config.ALERT_DIR}")
+    print(f"  • {config.LOW_VIGILANT_DIR}")
     print(f"  • {config.DROWSY_DIR}")
-    print(f"  • {config.NON_DROWSY_DIR}")
     print(f"\nYou can now run training:")
     print(f"  python train.py --model yolo --epochs 50")
     print()

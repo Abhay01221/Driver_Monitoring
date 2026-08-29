@@ -8,8 +8,8 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 export default function Camera({ onCapture, disabled, isLive, onToggleLive }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const mediaStreamRef = useRef(null);
   const intervalRef = useRef(null);
-  const [stream, setStream] = useState(null);
   const [error, setError] = useState(null);
   const [isReady, setIsReady] = useState(false);
   const [fps, setFps] = useState(0);
@@ -17,6 +17,8 @@ export default function Camera({ onCapture, disabled, isLive, onToggleLive }) {
 
   // Initialize webcam
   useEffect(() => {
+    const videoElement = videoRef.current;
+
     async function initCamera() {
       try {
         const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -27,9 +29,9 @@ export default function Camera({ onCapture, disabled, isLive, onToggleLive }) {
           }
         });
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-          setStream(mediaStream);
+        if (videoElement) {
+          videoElement.srcObject = mediaStream;
+          mediaStreamRef.current = mediaStream;
           setError(null);
         }
       } catch (err) {
@@ -46,7 +48,9 @@ export default function Camera({ onCapture, disabled, isLive, onToggleLive }) {
     initCamera();
 
     return () => {
-      if (stream) stream.getTracks().forEach(t => t.stop());
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      if (videoElement) videoElement.srcObject = null;
     };
   }, []);
 
@@ -66,10 +70,15 @@ export default function Camera({ onCapture, disabled, isLive, onToggleLive }) {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+      return;
+    }
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob((blob) => {

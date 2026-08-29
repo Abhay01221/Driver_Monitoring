@@ -5,8 +5,8 @@ import Camera from '@/components/Camera';
 import DetectionResult from '@/components/DetectionResult';
 import { predictDrowsiness, testConnection } from '@/lib/api';
 
-// How many consecutive drowsy predictions trigger the alarm
-const ALERT_THRESHOLD = 3;
+// Continuous drowsiness duration required before sounding the alarm.
+const DROWSY_ALARM_SECONDS = 5;
 
 export default function Home() {
   const [prediction, setPrediction] = useState(null);
@@ -18,7 +18,9 @@ export default function Home() {
   const [isAlarming, setIsAlarming] = useState(false);
   const [sessionStats, setSessionStats] = useState({ total: 0, drowsy: 0, alert: 0 });
   const audioCtxRef = useRef(null);
+  const alarmAudioRef = useRef(null);
   const alarmIntervalRef = useRef(null);
+  const drowsySinceRef = useRef(null);
   const isProcessingRef = useRef(false); // prevent overlapping requests in live mode
 
   // Check backend on mount
@@ -33,6 +35,13 @@ export default function Home() {
   // --------------- Audio alarm ---------------
   const playBeep = useCallback(() => {
     try {
+      const audio = alarmAudioRef.current;
+      if (audio && audio.readyState > 0) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+        return;
+      }
+
       if (!audioCtxRef.current) {
         audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
       }
@@ -97,15 +106,17 @@ export default function Home() {
           alert: prev.alert + (drowsy ? 0 : 1),
         }));
 
-        setDrowsyStreak(prev => {
-          const streak = drowsy ? prev + 1 : 0;
-          if (streak >= ALERT_THRESHOLD) {
-            startAlarm();
-          } else {
-            stopAlarm();
-          }
-          return streak;
-        });
+        if (drowsy) {
+          const now = Date.now();
+          if (drowsySinceRef.current === null) drowsySinceRef.current = now;
+          const elapsedSeconds = (now - drowsySinceRef.current) / 1000;
+          setDrowsyStreak(Math.floor(elapsedSeconds));
+          if (elapsedSeconds >= DROWSY_ALARM_SECONDS) startAlarm();
+        } else {
+          drowsySinceRef.current = null;
+          setDrowsyStreak(0);
+          stopAlarm();
+        }
       } else {
         throw new Error('Invalid response from server');
       }
@@ -122,6 +133,7 @@ export default function Home() {
     setIsLive(prev => {
       if (prev) {
         // Turning off — reset streak/alarm
+        drowsySinceRef.current = null;
         setDrowsyStreak(0);
         stopAlarm();
       } else {
@@ -129,6 +141,7 @@ export default function Home() {
         setSessionStats({ total: 0, drowsy: 0, alert: 0 });
         setPrediction(null);
         setError(null);
+        drowsySinceRef.current = null;
       }
       return !prev;
     });
@@ -194,6 +207,7 @@ export default function Home() {
                 isLive={isLive}
                 onToggleLive={handleToggleLive}
               />
+              <audio ref={alarmAudioRef} src="/alarm.mp3" preload="auto" aria-hidden="true" />
             </div>
 
             {/* Session stats (visible once monitoring started) */}
@@ -241,7 +255,7 @@ export default function Home() {
                 <li>Allow camera access when prompted</li>
                 <li>Click <strong>Start Live Monitoring</strong> for continuous analysis</li>
                 <li>Or click <strong>Capture Frame</strong> for a single snapshot</li>
-                <li>Alarm sounds after {ALERT_THRESHOLD} consecutive drowsy detections</li>
+                <li>Alarm sounds after {DROWSY_ALARM_SECONDS} seconds of continuous drowsiness</li>
               </ol>
             </div>
           </div>
@@ -282,7 +296,7 @@ export default function Home() {
                 <div className="card bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-200 dark:border-green-800">
                   <h3 className="text-lg font-semibold text-green-900 dark:text-green-200 mb-2">🎯 Live Monitoring</h3>
                   <p className="text-sm text-green-800 dark:text-green-300">
-                    Analyzes 1 frame/second continuously. Alarm triggers after {ALERT_THRESHOLD} consecutive drowsy detections.
+                    Analyzes 1 frame/second continuously. Alarm triggers after {DROWSY_ALARM_SECONDS} seconds of continuous drowsiness.
                   </p>
                 </div>
               </div>

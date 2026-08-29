@@ -112,10 +112,11 @@ docker run -p 8000:8000 \
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ALLOWED_ORIGINS` | Comma-separated frontend URLs | `http://localhost:3000` |
+| `ALLOWED_ORIGINS` | Comma-separated frontend URLs | `http://localhost:3000,http://127.0.0.1:3000` |
 | `MODEL_PATH` | Path to model weights | `weights/best.pt` |
 | `MODEL_TYPE` | Model type (yolo/cnn) | `yolo` |
 | `PORT` | Server port | `8000` |
+| `MAX_IMAGE_BYTES` | Maximum uploaded image size | `10485760` |
 
 ## 🏗️ Architecture
 

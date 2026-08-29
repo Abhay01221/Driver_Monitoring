@@ -3,6 +3,7 @@ Model management and loading
 This module abstracts model loading so the underlying architecture can be swapped
 """
 import os
+from pathlib import Path
 from typing import Optional, Protocol
 from ultralytics import YOLO
 import torch
@@ -29,17 +30,27 @@ class YOLOModel:
         Args:
             model_path: Path to YOLO weights file (.pt)
         """
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model weights not found at {model_path}")
+        path = Path(model_path)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[2] / path
+        if not path.is_file():
+            raise FileNotFoundError(f"Model weights not found at {path}")
         
         # Load YOLO model
-        self.model = YOLO(model_path)
+        self.model = YOLO(str(path))
+
+        class_names = {str(name).lower().replace("-", "_") for name in self.model.names.values()}
+        if not ({"drowsy", "alert", "non_drowsy"} & class_names):
+            raise ValueError(
+                "The configured model is not a drowsiness classifier. "
+                "Expected a Drowsy/Alert/Non_Drowsy class."
+            )
         
         # Set device (use GPU if available)
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model.to(self.device)
         
-        print(f"✓ YOLO model loaded from {model_path}")
+        print(f"✓ YOLO model loaded from {path}")
         print(f"✓ Using device: {self.device}")
     
     def predict(self, image, conf_threshold: float = 0.25, **kwargs):

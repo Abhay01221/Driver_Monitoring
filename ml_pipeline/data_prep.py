@@ -12,25 +12,27 @@ import shutil
 import cv2
 
 
-def load_image_paths_and_labels(data_dir: Path = None) -> Tuple[list, list]:
+def load_image_paths_and_labels(data_dir: Path = None, num_classes: int = 2) -> Tuple[list, list]:
     """
     Load image paths and labels from directory structure
     
-    Expected structure:
+    For UTA-RLDD (2-class from Kaggle):
         data/
-        ├── Drowsy/
-        │   ├── img1.jpg
-        │   └── img2.jpg
-        └── Non Drowsy/
-            ├── img1.jpg
-            └── img2.jpg
+        ├── active/         (label 0 - Alert)
+        └── fatigue/        (label 1 - Drowsy)
+    
+    For legacy binary classification:
+        data/
+        ├── Non Drowsy/     (label 0)
+        └── Drowsy/         (label 1)
     
     Args:
         data_dir: Path to data directory. If None, uses config.DATA_DIR
+        num_classes: Number of classes (2 or 3)
     
     Returns:
         image_paths: List of image file paths
-        labels: List of labels (0=Non Drowsy, 1=Drowsy)
+        labels: List of labels
     """
     if data_dir is None:
         data_dir = config.DATA_DIR
@@ -39,59 +41,68 @@ def load_image_paths_and_labels(data_dir: Path = None) -> Tuple[list, list]:
     image_paths = []
     labels = []
     
-    # Try multiple possible structures
+    # Try UTA-RLDD structure (active/fatigue)
+    active_dir = data_dir / "active"
+    fatigue_dir = data_dir / "fatigue"
+    
+    if active_dir.exists() and fatigue_dir.exists():
+        # Load Active (Alert) - label 0
+        for img_file in active_dir.glob("*.*"):
+            if img_file.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp']:
+                image_paths.append(str(img_file))
+                labels.append(0)
+        
+        # Load Fatigue (Drowsy) - label 1
+        for img_file in fatigue_dir.glob("*.*"):
+            if img_file.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp']:
+                image_paths.append(str(img_file))
+                labels.append(1)
+        
+        if len(image_paths) > 0:
+            print(f"✓ Found {len(image_paths)} images (UTA-RLDD format)")
+            print(f"  - Active (Alert): {labels.count(0)}")
+            print(f"  - Fatigue (Drowsy): {labels.count(1)}")
+            return image_paths, labels
+    
+    # Try legacy binary classification structure
     possible_structures = [
-        (data_dir / "Non Drowsy", data_dir / "Drowsy"),  # Direct structure
-        (data_dir / "Non_Drowsy", data_dir / "Drowsy"),  # Underscore variant
-        (data_dir / "non_drowsy", data_dir / "drowsy"),  # Lowercase
+        (data_dir / "Non Drowsy", data_dir / "Drowsy"),
+        (data_dir / "Non_Drowsy", data_dir / "Drowsy"),
+        (data_dir / "non_drowsy", data_dir / "drowsy"),
+        (data_dir / "Alert", data_dir / "Drowsy"),
     ]
     
     non_drowsy_dir = None
     drowsy_dir = None
     
-    # Find the correct structure
     for non_d, d in possible_structures:
         if non_d.exists() and d.exists():
             non_drowsy_dir = non_d
             drowsy_dir = d
             break
     
-    if non_drowsy_dir is None or drowsy_dir is None:
-        # Search recursively
-        print(f"⚠ Standard structure not found in {data_dir}, searching recursively...")
-        non_drowsy_dirs = list(data_dir.rglob("*Non*Drowsy"))
-        drowsy_dirs = list(data_dir.rglob("*Drowsy"))
-        drowsy_dirs = [d for d in drowsy_dirs if "Non" not in d.name]
-        
-        if non_drowsy_dirs:
-            non_drowsy_dir = non_drowsy_dirs[0]
-        if drowsy_dirs:
-            drowsy_dir = drowsy_dirs[0]
-    
-    # Load Non Drowsy (label 0)
-    if non_drowsy_dir and non_drowsy_dir.exists():
+    if non_drowsy_dir and drowsy_dir:
+        # Load Non Drowsy (label 0)
         for img_file in non_drowsy_dir.glob("*.*"):
             if img_file.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp']:
                 image_paths.append(str(img_file))
                 labels.append(0)
-    
-    # Load Drowsy (label 1)
-    if drowsy_dir and drowsy_dir.exists():
+        
+        # Load Drowsy (label 1)
         for img_file in drowsy_dir.glob("*.*"):
             if img_file.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp']:
                 image_paths.append(str(img_file))
                 labels.append(1)
+        
+        if len(image_paths) > 0:
+            print(f"✓ Found {len(image_paths)} images (binary mode)")
+            print(f"  - Non Drowsy: {labels.count(0)}")
+            print(f"  - Drowsy: {labels.count(1)}")
+            return image_paths, labels
     
     if len(image_paths) == 0:
         print(f"\n❌ No images found in {data_dir}")
-        print(f"Searched in:")
-        print(f"  - {non_drowsy_dir}")
-        print(f"  - {drowsy_dir}")
         print(f"\nPlease run: python download_dataset.py")
-    else:
-        print(f"✓ Found {len(image_paths)} images")
-        print(f"  - Non Drowsy: {labels.count(0)}")
-        print(f"  - Drowsy: {labels.count(1)}")
     
     return image_paths, labels
 
@@ -171,30 +182,37 @@ def compute_class_weights(labels: list) -> Dict[int, float]:
 
 
 
-def prepare_yolo_dataset(data_splits: Dict, output_dir: Path = None):
+def prepare_yolo_dataset(data_splits: Dict, output_dir: Path = None, num_classes: int = 3):
     """
     Prepare dataset in YOLO classification format
     
     YOLO expects:
         dataset/
         ├── train/
-        │   ├── Non_Drowsy/
+        │   ├── Alert/
+        │   ├── Low_Vigilant/
         │   └── Drowsy/
         ├── val/
-        │   ├── Non_Drowsy/
+        │   ├── Alert/
+        │   ├── Low_Vigilant/
         │   └── Drowsy/
         └── test/
-            ├── Non_Drowsy/
+            ├── Alert/
+            ├── Low_Vigilant/
             └── Drowsy/
     
     Args:
         data_splits: Dictionary from split_data()
         output_dir: Output directory (default: data/yolo_dataset)
+        num_classes: Number of classes (2 or 3)
     """
     if output_dir is None:
         output_dir = config.DATA_DIR / "yolo_dataset"
     
     output_dir.mkdir(exist_ok=True)
+    
+    # Select appropriate class names
+    class_names = config.CLASS_NAMES if num_classes == 3 else config.BINARY_CLASS_NAMES
     
     for split_name, (paths, labels) in data_splits.items():
         print(f"\n✓ Preparing YOLO {split_name} set...")
@@ -203,13 +221,13 @@ def prepare_yolo_dataset(data_splits: Dict, output_dir: Path = None):
         split_dir.mkdir(exist_ok=True)
         
         # Create class directories
-        for class_name in config.CLASS_NAMES:
+        for class_name in class_names:
             class_dir = split_dir / class_name
             class_dir.mkdir(exist_ok=True)
         
         # Copy images to respective class folders
         for img_path, label in zip(paths, labels):
-            class_name = config.CLASS_NAMES[label]
+            class_name = class_names[label]
             dest_dir = split_dir / class_name
             
             img_file = Path(img_path)
@@ -224,19 +242,22 @@ def prepare_yolo_dataset(data_splits: Dict, output_dir: Path = None):
 
 if __name__ == "__main__":
     # Test data loading
-    print("Testing data preparation...")
+    print("Testing data preparation with UTA-RLDD dataset...")
     
-    image_paths, labels = load_image_paths_and_labels(config.DATA_DIR)
+    image_paths, labels = load_image_paths_and_labels(config.DATA_DIR, num_classes=2)
     
     if len(image_paths) == 0:
         print("\n⚠ No images found!")
         print(f"Please download the dataset to: {config.DATA_DIR}")
         print("\nRun: python download_dataset.py")
     else:
+        num_classes = len(set(labels))
+        print(f"\n✓ Loaded dataset with {num_classes} classes")
+        
         data_splits = split_data(image_paths, labels)
         class_weights = compute_class_weights(data_splits["train"][1])
         
         # Prepare YOLO dataset
-        yolo_dir = prepare_yolo_dataset(data_splits)
+        yolo_dir = prepare_yolo_dataset(data_splits, num_classes=num_classes)
         print(f"\n✓ YOLO dataset prepared successfully")
         print(f"  - Location: {yolo_dir}")
