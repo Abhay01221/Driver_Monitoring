@@ -1,200 +1,126 @@
-# 🚗 Driver Drowsiness Detection System
+# Driver Drowsiness Detection System
 
-A complete end-to-end ML-powered web application for real-time driver drowsiness detection using computer vision and deep learning.
+A complete end-to-end ML-powered web application for real-time driver drowsiness detection using the DDD (Driver Drowsiness Dataset) from Kaggle.
 
-![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Python](https://img.shields.io/badge/Python-3.11+-blue)
-![Node](https://img.shields.io/badge/Node-18+-green)
-![License](https://img.shields.io/badge/License-MIT-yellow)
-
----
-
-## 📋 Table of Contents
-
-- [Overview](#-overview)
-- [System Architecture](#-system-architecture)
-- [Project Structure](#-project-structure)
-- [Quick Start Guide](#-quick-start-guide)
-- [Dataset Information](#-dataset-information)
-- [Model Information](#-model-information)
-- [Deployment Guide](#-deployment-guide)
-- [API Documentation](#-api-documentation)
-- [Technologies Used](#-technologies-used)
-- [Troubleshooting](#-troubleshooting)
-
----
-
-## 🎯 Overview
-
-This system detects driver drowsiness in real-time using webcam images. It consists of three main components:
-
-1. **ML Pipeline**: Data preparation, model training, and evaluation
-2. **Backend API**: FastAPI server with YOLO model for inference
-3. **Frontend**: Next.js web app with webcam integration
-
-### Key Features
-
-- ✅ Real-time drowsiness detection via webcam
-- ✅ 99.75% accuracy with YOLOv8 classification model
-- ✅ Fast inference (~40ms on CPU)
-- ✅ Clean, modern UI with color-coded results
-- ✅ Production-ready architecture
-- ✅ Full deployment guides (Vercel + Render)
-
----
-
-## 🏗️ System Architecture
-
-### High-Level Overview
-
-```
-┌─────────────┐      Webcam Feed      ┌──────────────┐
-│   Browser   │ ◄──────────────────► │   Next.js    │
-│  (Camera)   │      Capture Frame     │   Frontend   │
-└─────────────┘                        └──────────────┘
-                                              │
-                                              │ REST API
-                                              │ POST /predict
-                                              ▼
-                                       ┌──────────────┐
-                                       │   FastAPI    │
-                                       │   Backend    │
-                                       └──────────────┘
-                                              │
-                                              │ Inference
-                                              ▼
-                                       ┌──────────────┐
-                                       │  YOLOv8n-cls │
-                                       │  Model (99%) │
-                                       └──────────────┘
-```
-
-### Data Flow
-
-```
-1. User clicks "Capture" → Camera.jsx captures frame
-2. Convert to JPEG blob → Send to page.jsx
-3. API call via lib/api.js → POST /predict
-4. Backend decodes image → Preprocesses (BGR→RGB)
-5. YOLO inference → Returns prediction
-6. Frontend displays result → Color-coded UI
-```
-
-### Component Architecture
-
-**Frontend (Next.js 14)**
-```
-app/
-├── page.jsx              # Main application logic
-├── layout.jsx            # Root layout
-└── globals.css           # Tailwind styles
-
-components/
-├── Camera.jsx            # Webcam capture
-├── DetectionResult.jsx   # Result display
-└── Loading.jsx           # Loading states
-
-lib/
-└── api.js                # API client
-```
-
-**Backend (FastAPI)**
-```
-app/
-├── main.py               # App entry + lifespan
-├── routes/
-│   ├── health.py         # GET /health
-│   └── predict.py        # POST /predict
-├── models/
-│   └── model.py          # Model management
-├── services/
-│   ├── inference.py      # Prediction logic
-│   └── image_processing.py
-└── utils/
-    └── helpers.py        # Utilities
-```
-
-**ML Pipeline**
-```
-ml_pipeline/
-├── config.py             # Configuration
-├── data_prep.py          # Data loading
-├── train.py              # Training script
-├── evaluate.py           # Evaluation
-└── download_dataset.py   # Dataset downloader
-```
-
----
-
-## 📁 Project Structure
+## 🏗️ Project Structure
 
 ```
 Driver_Monitoring/
-├── frontend/              # Next.js web application
+├── ml_pipeline/                    # ML training & data preparation
+│   ├── data/                       # Dataset (download via Kaggle)
+│   │   ├── Drowsy/
+│   │   └── Non_Drowsy/
+│   ├── models/                     # Saved trained models
+│   ├── outputs/                    # Training plots & metrics
+│   ├── data_prep.py               # Data loading & preprocessing
+│   ├── train.py                   # Model training script
+│   ├── evaluate.py                # Model evaluation
+│   ├── config.py                  # Training configuration
+│   └── requirements.txt
+│
+├── backend/                        # FastAPI backend
 │   ├── app/
-│   │   ├── page.jsx      # Main page with camera
-│   │   ├── layout.jsx    # Root layout
-│   │   └── globals.css   # Global styles
+│   │   ├── main.py                # FastAPI app & lifespan
+│   │   ├── routes/
+│   │   │   ├── health.py          # Health check endpoint
+│   │   │   └── predict.py         # Prediction endpoint
+│   │   ├── models/
+│   │   │   └── model.py           # Model loading & management
+│   │   ├── services/
+│   │   │   ├── inference.py       # Inference logic
+│   │   │   └── image_processing.py # Image preprocessing
+│   │   └── utils/
+│   │       └── helpers.py         # Utility functions
+│   ├── weights/
+│   │   └── best.pt                # Trained YOLO weights
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── README.md
+│
+├── frontend/                       # Next.js frontend
+│   ├── app/
+│   │   ├── page.jsx               # Main page with webcam
+│   │   ├── layout.jsx             # Root layout
+│   │   └── globals.css            # Global styles
 │   ├── components/
 │   │   ├── Camera.jsx             # Webcam component
 │   │   ├── DetectionResult.jsx    # Result display
-│   │   └── Loading.jsx            # Loading spinner
+│   │   └── Loading.jsx            # Loading indicator
 │   ├── lib/
 │   │   └── api.js                 # API client
+│   ├── public/
 │   ├── .env.local.example
-│   └── package.json
+│   ├── package.json
+│   └── README.md
 │
-├── backend/               # FastAPI backend
-│   ├── app/
-│   │   ├── main.py                # FastAPI app
-│   │   ├── routes/                # API endpoints
-│   │   ├── models/                # Model loading
-│   │   ├── services/              # Business logic
-│   │   └── utils/                 # Helpers
-│   ├── weights/
-│   │   └── best.pt                # Trained model (99.75%)
-│   ├── .env.example
-│   ├── requirements.txt
-│   └── Dockerfile
-│
-├── ml_pipeline/           # ML training pipeline
-│   ├── data/              # Dataset (auto-downloaded)
-│   ├── models/            # Trained models
-│   │   ├── drowsiness_detection/
-│   │   ├── drowsiness_detection-2/  ⭐ Best (99.75%)
-│   │   └── drowsiness_detection-3/
-│   ├── config.py          # Training config
-│   ├── data_prep.py       # Data preparation
-│   ├── train.py           # Training script
-│   ├── evaluate.py        # Evaluation
-│   └── download_dataset.py
-│
-├── ARCHITECTURE.md        # Detailed architecture
-├── DATASET_INFO.md        # Dataset documentation
-├── MODEL_INFO.md          # Model information
-├── DEPLOYMENT_GUIDE.md    # Deployment instructions
-└── README.md              # This file
+└── README.md                       # This file
 ```
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.11+
+- Node.js 18+
+- Kaggle account & API token
+- GPU recommended for training (CPU works but slower)
 
 ---
 
-## 🚀 Quick Start Guide
+## 📊 Stage 1: Data Preparation & Model Training
 
-### Prerequisites
-
-- **Python 3.11+** (for backend & ML pipeline)
-- **Node.js 18+** (for frontend)
-- **Kaggle Account** (for dataset download)
-- **GPU Recommended** for training (CPU works but slower)
-
-### 1️⃣ Clone Repository
+### 1.1 Download Dataset
 
 ```bash
-git clone https://github.com/yourusername/Driver_Monitoring.git
-cd Driver_Monitoring
+# Install Kaggle CLI
+pip install kaggle
+
+# Set up Kaggle credentials (~/.kaggle/kaggle.json)
+# Download from: https://www.kaggle.com/settings/account
+
+# Download dataset
+cd ml_pipeline
+kaggle datasets download -d ismailnasri20/driver-drowsiness-dataset-ddd
+unzip driver-drowsiness-dataset-ddd.zip -d data/
 ```
 
-### 2️⃣ Setup Backend
+### 1.2 Install ML Dependencies
+
+```bash
+cd ml_pipeline
+pip install -r requirements.txt
+```
+
+### 1.3 Train the Model
+
+```bash
+# Train with transfer learning (MobileNetV2 - recommended)
+python train.py --model mobilenet --epochs 50 --batch-size 32
+
+# OR train custom CNN from scratch
+python train.py --model custom_cnn --epochs 100 --batch-size 32
+
+# OR train YOLO classifier (for detection pipeline)
+python train.py --model yolo --epochs 100 --img-size 640
+```
+
+### 1.4 Evaluate Model
+
+```bash
+python evaluate.py --model-path models/best_model.h5
+```
+
+This generates:
+- Confusion matrix
+- Precision, Recall, F1-Score
+- ROC curve
+- Test accuracy report
+
+---
+
+## 🔧 Stage 2: Backend Setup (FastAPI)
+
+### 2.1 Local Development
 
 ```bash
 cd backend
@@ -202,19 +128,51 @@ cd backend
 # Install dependencies
 pip install -r requirements.txt
 
-# Copy environment file
+# Copy trained model weights
+cp ../ml_pipeline/models/best.pt weights/
+
+# Set environment variables
 cp .env.example .env
+# Edit .env with your settings
 
-# Model is already included (drowsiness_detection-2)
-# weights/best.pt (99.75% accuracy)
-
-# Run backend
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Run development server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Backend will be at: **http://localhost:8000**
+API will be available at: `http://localhost:8000`
 
-### 3️⃣ Setup Frontend
+### 2.2 Test Backend
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Test prediction (with an image file)
+curl -X POST http://localhost:8000/predict \
+  -F "file=@test_image.jpg"
+```
+
+### 2.3 Deploy to Render
+
+1. Push code to GitHub
+2. Create new Web Service on [Render](https://render.com)
+3. Connect your repository
+4. Configure:
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - **Environment Variables**:
+     - `ALLOWED_ORIGINS`: `https://your-frontend.vercel.app`
+     - `MODEL_PATH`: `weights/best.pt`
+   - **Health Check Path**: `/health`
+5. Deploy!
+
+⚠️ **Note**: Render free tier has ~30-60s cold start on first request after idle.
+
+---
+
+## 💻 Stage 3: Frontend Setup (Next.js)
+
+### 3.1 Local Development
 
 ```bash
 cd frontend
@@ -222,569 +180,231 @@ cd frontend
 # Install dependencies
 npm install
 
-# Setup environment
+# Set environment variables
 cp .env.local.example .env.local
+# Edit .env.local:
+# NEXT_PUBLIC_API_URL=http://localhost:8000
 
-# Edit .env.local
-echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
-
-# Run frontend
+# Run development server
 npm run dev
 ```
 
-Frontend will be at: **http://localhost:3000**
+Frontend will be available at: `http://localhost:3000`
 
-### 4️⃣ Test the Application
-
-1. Open **http://localhost:3000** in your browser
-2. Allow camera permissions when prompted
-3. Click **"Capture & Analyze Frame"**
-4. See drowsiness detection result!
-
----
-
-## 📊 Dataset Information
-
-### Current Dataset: UTA-RLDD (Real-Life Drowsiness Dataset)
-
-The system uses the **UTA-RLDD** dataset from Kaggle, a high-quality real-world drowsiness dataset.
-
-#### Dataset Statistics
-
-| Metric | Value |
-|--------|-------|
-| **Total Images** | 9,054 |
-| **Classes** | 2 (Alert, Drowsy) |
-| **Alert Images** | 5,862 (65%) |
-| **Drowsy Images** | 3,192 (35%) |
-| **Source** | https://www.kaggle.com/datasets/minhngt02/uta-rldd |
-| **Format** | JPG images from video frames |
-
-#### Dataset Structure
-
-```
-UTA-RLDD/
-├── train/
-│   ├── active/      # Alert/awake drivers (5,862 images)
-│   └── fatigue/     # Drowsy drivers (3,192 images)
-├── val/
-│   ├── active/
-│   └── fatigue/
-└── test/
-    ├── active/
-    └── fatigue/
-```
-
-#### Data Split (Auto-generated)
-
-- **Training**: 6,337 images (70%)
-- **Validation**: 1,358 images (15%)
-- **Test**: 1,359 images (15%)
-
-#### Class Balance
-
-The dataset is imbalanced (65% alert, 35% drowsy). The training pipeline automatically computes **class weights** to handle this:
-
-- Alert class weight: 0.77
-- Drowsy class weight: 1.42
-
-### Downloading the Dataset
-
-The dataset is **automatically downloaded** when you run training:
+### 3.2 Deploy to Vercel
 
 ```bash
-cd ml_pipeline
-python download_dataset.py
-```
+# Install Vercel CLI (optional)
+npm i -g vercel
 
-Or manually:
+# Deploy
+cd frontend
+vercel
 
-```python
-import kagglehub
-path = kagglehub.dataset_download("minhngt02/uta-rldd")
-print("Dataset downloaded to:", path)
+# Or use Vercel GitHub integration:
+# 1. Push to GitHub
+# 2. Import project in Vercel dashboard
+# 3. Set environment variable:
+#    NEXT_PUBLIC_API_URL=https://your-backend.onrender.com
+# 4. Deploy!
 ```
-
-The config automatically detects the Kaggle cache location:
-```
-C:\Users\<username>\.cache\kagglehub\datasets\minhngt02\uta-rldd\versions\2
-```
-
-For more details, see [`DATASET_INFO.md`](DATASET_INFO.md)
 
 ---
 
-## 🧠 Model Information
+## 🔗 Stage 4: Connect Frontend & Backend
 
-### Active Model: drowsiness_detection-2
+1. **Deploy Backend First** → Get Render URL (e.g., `https://drowsiness-api.onrender.com`)
 
-The backend currently uses the **best performing model** from training runs.
+2. **Configure Frontend**:
+   - In Vercel dashboard → Settings → Environment Variables
+   - Add: `NEXT_PUBLIC_API_URL = https://drowsiness-api.onrender.com`
+   - Redeploy frontend
 
-#### Model Performance
+3. **Configure Backend CORS**:
+   - In Render dashboard → Environment Variables
+   - Add: `ALLOWED_ORIGINS = https://your-app.vercel.app`
+   - Redeploy backend
 
-| Metric | Value |
-|--------|-------|
-| **Architecture** | YOLOv8n Classification |
-| **Training Accuracy** | **99.75%** ⭐ |
-| **Validation Loss** | 0.0115 |
-| **Top-1 Accuracy** | 99.75% |
-| **Top-5 Accuracy** | 100% |
-| **Model Size** | 8.36 MB |
-| **Inference Time (CPU)** | ~40ms |
-| **Inference Time (GPU)** | ~10ms |
+---
 
-#### Model Architecture
-
-```
-Input Image (224x224x3)
-    ↓
-YOLOv8n Backbone
-    ↓
-Classification Head
-    ↓
-Softmax (2 classes)
-    ↓
-Output: [Alert_prob, Drowsy_prob]
-```
-
-#### Classes
-
-1. **Alert** (Label 0) - Driver is awake and attentive
-2. **Drowsy** (Label 1) - Driver shows signs of fatigue
-
-#### Model Files
-
-```
-backend/weights/best.pt           # Active model (99.75%)
-ml_pipeline/models/
-├── drowsiness_detection/         # 98.44% accuracy
-├── drowsiness_detection-2/       # 99.75% accuracy ⭐ ACTIVE
-└── drowsiness_detection-3/       # 40.46% accuracy
-```
-
-### Training Your Own Model
-
-If you want to retrain with the UTA-RLDD dataset:
+## 🧪 Local Testing (Full Stack)
 
 ```bash
-cd ml_pipeline
+# Terminal 1: Backend
+cd backend
+uvicorn app.main:app --reload --port 8000
 
-# Download dataset (if not already)
-python download_dataset.py
+# Terminal 2: Frontend
+cd frontend
+npm run dev
 
-# Train YOLO model (50 epochs, ~1-2 hours)
-python train.py --model yolo --epochs 50 --batch-size 32 --img-size 224
-
-# Copy trained model to backend
-copy models\drowsiness_detection\weights\best.pt ..\backend\weights\best.pt
-
-# Restart backend to load new model
-```
-
-For more details, see [`MODEL_INFO.md`](MODEL_INFO.md)
-
----
-
-## 🚀 Deployment Guide
-
-### Backend Deployment (Render)
-
-1. **Push to GitHub**
-   ```bash
-   git add .
-   git commit -m "Ready for deployment"
-   git push origin main
-   ```
-
-2. **Create Web Service on Render**
-   - Go to [Render Dashboard](https://render.com)
-   - Click "New +" → "Web Service"
-   - Connect your GitHub repository
-
-3. **Configure Build Settings**
-   - **Name**: drowsiness-detection-api
-   - **Environment**: Python
-   - **Build Command**: `pip install -r backend/requirements.txt`
-   - **Start Command**: `cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-   - **Root Directory**: Leave empty (or set to `backend`)
-
-4. **Set Environment Variables**
-   ```
-   ALLOWED_ORIGINS=https://your-frontend.vercel.app
-   MODEL_PATH=weights/best.pt
-   MODEL_TYPE=yolo
-   ```
-
-5. **Deploy!** 
-   - Render will build and deploy automatically
-   - Wait for deployment to complete (~3-5 minutes)
-   - Get your backend URL: `https://your-app.onrender.com`
-
-⚠️ **Note**: Free tier has 30-60s cold start after 15min idle
-
-### Frontend Deployment (Vercel)
-
-1. **Push to GitHub** (if not already)
-
-2. **Import to Vercel**
-   - Go to [Vercel Dashboard](https://vercel.com)
-   - Click "Add New..." → "Project"
-   - Import your GitHub repository
-
-3. **Configure Project**
-   - **Framework Preset**: Next.js
-   - **Root Directory**: `frontend`
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `.next`
-
-4. **Set Environment Variable**
-   ```
-   NEXT_PUBLIC_API_URL=https://your-backend.onrender.com
-   ```
-
-5. **Deploy!**
-   - Vercel will build and deploy automatically
-   - Get your URL: `https://your-app.vercel.app`
-
-### Connect Frontend & Backend
-
-**Update Backend CORS:**
-- Go to Render dashboard → Your service → Environment
-- Update `ALLOWED_ORIGINS` to include Vercel URL
-- Save and redeploy
-
-**Test the Connection:**
-- Visit your Vercel URL
-- Check if backend status shows "Connected"
-- Try capturing a frame
-
-For detailed deployment instructions, see [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)
-
----
-
-## 📡 API Documentation
-
-### Base URL
-
-- **Local**: `http://localhost:8000`
-- **Production**: `https://your-app.onrender.com`
-
-### Endpoints
-
-#### 1. Health Check
-
-**GET** `/health`
-
-Check if the API and model are loaded.
-
-**Response**
-```json
-{
-  "status": "healthy",
-  "service": "Driver Drowsiness Detection API",
-  "version": "1.0.0",
-  "model_loaded": true,
-  "python_version": "3.11.0",
-  "platform": "Linux"
-}
-```
-
-#### 2. Predict Drowsiness
-
-**POST** `/predict`
-
-Upload an image for drowsiness detection.
-
-**Request**
-```http
-POST /predict
-Content-Type: multipart/form-data
-
-file: <image_file.jpg>
-```
-
-**Success Response (200)**
-```json
-{
-  "success": true,
-  "prediction": {
-    "label": "Drowsy",
-    "confidence": 0.9234,
-    "status": "drowsy",
-    "severity": 2,
-    "color": "red",
-    "all_probs": {
-      "Alert": 0.0766,
-      "Drowsy": 0.9234
-    }
-  }
-}
-```
-
-**Error Response (400)**
-```json
-{
-  "detail": "Invalid file type. Only JPEG and PNG are supported."
-}
-```
-
-**Error Response (500)**
-```json
-{
-  "detail": "Prediction failed: Model not loaded"
-}
-```
-
-#### 3. Interactive API Docs
-
-Visit `/docs` for Swagger UI:
-- **Local**: http://localhost:8000/docs
-- **Production**: https://your-app.onrender.com/docs
-
-### API Client (Frontend)
-
-The frontend uses a clean API client in `lib/api.js`:
-
-```javascript
-import { predictDrowsiness } from '@/lib/api';
-
-// Capture and predict
-const blob = await captureFrame();
-const result = await predictDrowsiness(blob);
-
-console.log(result.prediction);
-// { label: "Drowsy", confidence: 0.92, status: "drowsy" }
+# Open browser: http://localhost:3000
+# Allow camera permissions
+# Click "Capture Frame" to test detection
 ```
 
 ---
 
-## 🛠️ Technologies Used
+## 📦 Model Training Details
 
-### Frontend Stack
+### Transfer Learning (MobileNetV2)
+- **Base**: MobileNetV2 pretrained on ImageNet
+- **Head**: Global Average Pooling → Dense(128) → Dropout(0.5) → Dense(1, sigmoid)
+- **Training**: Freeze base → train head → fine-tune top layers
+- **Expected Accuracy**: 95%+ on test set
+- **Inference Speed**: ~50ms on CPU
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Next.js | 14.1.0 | React framework with SSR |
-| React | 18.2.0 | UI library |
-| Tailwind CSS | 3.4.1 | Utility-first CSS |
-| JavaScript | ES2022 | Language |
+### Custom CNN
+- **Architecture**: 4 Conv blocks → Global Average Pool → Dense layers
+- **Parameters**: ~1M (lightweight)
+- **Expected Accuracy**: 92-94% on test set
+- **Inference Speed**: ~30ms on CPU
 
-### Backend Stack
+### YOLO Classifier (Current Implementation)
+- **Base**: YOLOv8n (nano)
+- **Fine-tuned**: On DDD dataset for 2-class classification
+- **Expected Accuracy**: 93-96% on test set
+- **Inference Speed**: ~40ms on CPU, ~10ms on GPU
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| FastAPI | 0.109.0 | Async web framework |
-| Uvicorn | 0.27.0 | ASGI server |
-| Python | 3.11+ | Language |
-| OpenCV | Latest | Image processing |
-| Ultralytics | 8.4+ | YOLO implementation |
-| PyTorch | 2.0+ | Deep learning framework |
+---
 
-### ML Pipeline
+## 🎯 Features
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| YOLOv8 | Latest | Classification model |
-| PyTorch | 2.0+ | Training framework |
-| NumPy | Latest | Numerical computing |
-| Pandas | Latest | Data manipulation |
-| Matplotlib | Latest | Visualization |
-| scikit-learn | Latest | ML utilities |
+### Frontend
+- ✅ Live webcam preview
+- ✅ One-click frame capture
+- ✅ Real-time prediction display
+- ✅ Confidence score visualization
+- ✅ Color-coded status (Green=Alert, Red=Drowsy)
+- ✅ Error handling (camera permissions, network errors)
+- ✅ Loading states with cold-start awareness
+- ✅ Responsive design
 
-### Deployment
+### Backend
+- ✅ FastAPI with async support
+- ✅ CORS configuration
+- ✅ Model loaded once at startup (lifespan)
+- ✅ Clean architecture (routes/services/models separation)
+- ✅ Health check endpoint
+- ✅ Multipart form-data image upload
+- ✅ OpenCV image decoding
+- ✅ YOLO inference
+- ✅ JSON prediction response
+- ✅ Error handling & validation
 
-| Service | Purpose |
-|---------|---------|
-| Vercel | Frontend hosting |
-| Render | Backend hosting |
-| GitHub | Version control |
-| Kaggle | Dataset storage |
+---
+
+## 🔄 Swapping Models
+
+The backend is designed to be model-agnostic. To swap YOLO for a different architecture:
+
+1. **Implement `ModelInterface`** in `backend/app/models/model.py`:
+   ```python
+   class CustomCNNModel:
+       def __init__(self, model_path: str):
+           # Load your model (TensorFlow, PyTorch, ONNX, etc.)
+           pass
+       
+       def predict(self, image, **kwargs):
+           # Run inference
+           # Return results in same format
+           pass
+   ```
+
+2. **Update `ModelManager.load_model()`**:
+   ```python
+   elif model_type == "custom_cnn":
+       self._model = CustomCNNModel(model_path)
+   ```
+
+3. **Update inference service** if output format differs
+
+The API contract (`POST /predict` → JSON response) remains unchanged.
+
+---
+
+## 📝 Environment Variables
+
+### Backend (.env)
+```bash
+ALLOWED_ORIGINS=http://localhost:3000,https://your-app.vercel.app
+MODEL_PATH=weights/best.pt
+MODEL_TYPE=yolo
+PORT=8000
+```
+
+### Frontend (.env.local)
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+### Backend Issues
 
-#### 1. Camera Not Working
-
-**Problem**: Camera permission denied or not accessible
-
-**Solutions**:
-- Check browser permissions (Chrome: `chrome://settings/content/camera`)
-- Use HTTPS in production (HTTP only works on localhost)
-- Try a different browser (Chrome/Edge recommended)
-- Check if another app is using the camera
-
-#### 2. Backend Connection Failed
-
-**Problem**: Frontend can't reach backend
-
-**Solutions**:
-- Verify backend is running (`http://localhost:8000/health`)
-- Check `NEXT_PUBLIC_API_URL` in `.env.local`
-- Verify CORS settings in backend `.env`
-- Check firewall/antivirus settings
-
-#### 3. Model Not Loading
-
-**Problem**: Backend starts but model fails to load
-
-**Solutions**:
-- Verify `weights/best.pt` exists in backend folder
-- Check file permissions
-- Verify PyTorch and Ultralytics are installed
+**Model not loading**:
+- Ensure `weights/best.pt` exists
 - Check `MODEL_PATH` environment variable
+- Verify YOLO weights are compatible with ultralytics version
 
-#### 4. Render Cold Start
+**CORS errors**:
+- Verify `ALLOWED_ORIGINS` includes your frontend URL
+- Check for trailing slashes (should NOT have them)
 
-**Problem**: First request takes 30-60 seconds
+**Cold start on Render**:
+- First request after idle takes 30-60s
+- Frontend shows "Waiting for server..." during cold start
+- Use a paid plan or keep-alive service to avoid this
 
-**Solutions**:
-- This is normal on Render free tier
-- Frontend shows "Waiting for server..." message
-- Wait for cold start to complete
-- Consider paid plan for always-on service
+### Frontend Issues
 
-#### 5. CORS Errors
+**Camera not working**:
+- Check browser permissions (chrome://settings/content/camera)
+- Must use HTTPS in production (localhost HTTP is OK)
+- Try different browser
 
-**Problem**: Browser blocks API requests
-
-**Solutions**:
-- Check `ALLOWED_ORIGINS` includes your frontend URL
-- Remove trailing slashes from URLs
-- Verify both HTTP and HTTPS variants if needed
-- Check browser console for exact error
-
-#### 6. Low Prediction Accuracy
-
-**Problem**: Model gives poor results
-
-**Solutions**:
-- Ensure good lighting in webcam image
-- Keep face centered in frame
-- Retrain model with more epochs (current: 1 epoch only)
-- Use better quality dataset
-
-### Debug Mode
-
-Enable detailed logging:
-
-**Backend**:
-```bash
-# Add to .env
-LOG_LEVEL=DEBUG
-```
-
-**Frontend**:
-```bash
-# Check browser console (F12)
-# Network tab shows API requests
-```
-
-### Getting Help
-
-1. Check existing issues on GitHub
-2. Review [`ARCHITECTURE.md`](ARCHITECTURE.md) for technical details
-3. Check logs in browser console and terminal
-4. Create a new GitHub issue with:
-   - Steps to reproduce
-   - Error messages
-   - Environment details (OS, browser, Python/Node versions)
+**API connection failed**:
+- Verify `NEXT_PUBLIC_API_URL` is set correctly
+- Check backend is running and accessible
+- Check CORS configuration
 
 ---
 
-## 📈 Performance Optimization
+## 📚 Technologies Used
 
-### Current Performance
-
-- **Model Inference**: 40ms (CPU), 10ms (GPU)
-- **API Response Time**: 50-100ms
-- **Frontend Load**: <1s
-- **Total Detection Time**: <200ms
-
-### Optimization Tips
-
-1. **Use GPU** for backend (10x faster inference)
-2. **Enable caching** for repeated predictions
-3. **Optimize image size** before sending to API
-4. **Use WebSocket** for real-time streaming (future)
-5. **Deploy with CDN** for faster frontend loading
-
----
-
-## 🔮 Future Enhancements
-
-### Planned Features
-
-- [ ] Real-time video streaming (WebSocket/WebRTC)
-- [ ] Multi-face detection support
-- [ ] Audio alert on drowsiness detected
-- [ ] Session analytics dashboard
-- [ ] Mobile app (React Native)
-- [ ] Eye Aspect Ratio (EAR) + CNN hybrid
-- [ ] Temporal smoothing (N consecutive frames)
-- [ ] User authentication system
-- [ ] Cloud storage for analysis history
-- [ ] Docker Compose for easy local setup
-
-### ML Improvements
-
-- [ ] Complete 50-epoch training (currently 1 epoch)
-- [ ] Ensemble models for better accuracy
-- [ ] Face detection preprocessing
-- [ ] Eye region focus
-- [ ] Model quantization (INT8) for faster inference
-- [ ] ONNX export for cross-platform deployment
+- **ML**: TensorFlow/Keras or PyTorch, Ultralytics YOLO, OpenCV
+- **Backend**: FastAPI, Uvicorn, Python 3.11
+- **Frontend**: Next.js 14 (App Router), React 18, TailwindCSS
+- **Deployment**: Vercel (frontend), Render (backend)
+- **Dataset**: Kaggle DDD (Driver Drowsiness Dataset)
 
 ---
 
 ## 📄 License
 
-MIT License - See [LICENSE](LICENSE) file for details
+MIT License - feel free to use for learning, portfolio, or commercial projects.
 
 ---
 
 ## 🙏 Acknowledgments
 
-- **Dataset**: [UTA-RLDD on Kaggle](https://www.kaggle.com/datasets/minhngt02/uta-rldd)
-- **YOLO**: [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics)
-- **Original Research**: Ghoddoosian et al. (2019) - UTA-RLDD Paper
-
-### Citation
-
-If you use this project or the UTA-RLDD dataset, please cite:
-
-```bibtex
-@inproceedings{ghoddoosian2019realistic,
-  title={A Realistic Dataset and Baseline Temporal Model for Early Drowsiness Detection},
-  author={Ghoddoosian, Reza and Galib, Marnim and Athitsos, Vassilis},
-  booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition Workshops},
-  year={2019}
-}
-```
+- Dataset: [Ismail Nasri - Driver Drowsiness Dataset (DDD)](https://www.kaggle.com/datasets/ismailnasri20/driver-drowsiness-dataset-ddd)
+- YOLO: [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics)
 
 ---
 
-## 📞 Contact & Support
+## 🔮 Future Enhancements
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/Driver_Monitoring/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/Driver_Monitoring/discussions)
-- **Email**: your.email@example.com
-
----
-
-## 🌟 Show Your Support
-
-If you find this project helpful, please consider:
-- ⭐ Starring the repository
-- 🐛 Reporting bugs
-- 💡 Suggesting features
-- 📖 Improving documentation
-- 🔀 Contributing code
+- [ ] Real-time video streaming (WebSocket/WebRTC)
+- [ ] Eye Aspect Ratio (EAR) + CNN hybrid detection
+- [ ] Temporal smoothing (N consecutive frames)
+- [ ] Audio alert on drowsiness
+- [ ] Session analytics dashboard
+- [ ] Multi-face detection
+- [ ] Mobile app (React Native)
 
 ---
 
-**Built with ❤️ for safer driving**
-
-Last Updated: 2026-08-24
+**Questions?** Open an issue or reach out!
