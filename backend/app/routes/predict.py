@@ -3,11 +3,13 @@ Prediction endpoint
 """
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
+from typing import Optional
 import os
 import sys
 
 from app.services.image_processing import decode_image, validate_image
 from app.services.inference import predict_drowsiness
+from app.services.temporal_analysis import reset_temporal_analyzer
 
 router = APIRouter()
 try:
@@ -17,13 +19,22 @@ except ValueError:
 
 
 @router.post("/predict")
-async def predict(file: UploadFile = File(...), extract_cv: bool = True):
+async def predict(
+    file: UploadFile = File(...), 
+    extract_cv: bool = True,
+    detect_eyes: bool = True,
+    use_temporal: bool = True,
+    previous_frame: Optional[UploadFile] = File(None)
+):
     """
     Predict drowsiness from uploaded image with optional CV feature extraction
     
     Args:
         file: Uploaded image file (JPEG, PNG)
         extract_cv: Extract CV features (HOG, Sobel, Optical Flow, Morphology)
+        detect_eyes: Detect eye closure for enhanced drowsiness detection
+        use_temporal: Use temporal analysis for smoothing predictions over time
+        previous_frame: Optional previous frame for optical flow analysis
         
     Returns:
         JSON with prediction results:
@@ -36,13 +47,18 @@ async def predict(file: UploadFile = File(...), extract_cv: bool = True):
                 "severity": int (0=safe, 1=warning, 2=danger),
                 "color": "green", "yellow", or "red",
                 "all_probs": {class_name: probability},
-                "cv_features": {
-                    "hog": {...},
-                    "sobel": {...},
-                    "optical_flow": {...},
-                    "morphology": {...}
+                "cv_features": {...},
+                "cv_validation": {...},
+                "eye_analysis": {...},
+                "temporal_analysis": {
+                    "smoothed_prediction": bool,
+                    "consecutive_drowsy": int,
+                    "drowsy_rate": float,
+                    "temporal_alert_level": int (0-3),
+                    "recommendation": str
                 },
-                "cv_validation": {...}
+                "temporal_smoothed": bool,
+                "raw_prediction": str (original prediction before temporal smoothing)
             }
         }
     """
@@ -70,14 +86,24 @@ async def predict(file: UploadFile = File(...), extract_cv: bool = True):
                 detail="Invalid image file. Could not decode image."
             )
         
-        # Decode image
+        # Decode current frame
         image = decode_image(file_bytes)
         
-        # Run inference with CV features
+        # Decode previous frame if provided
+        prev_image = None
+        if previous_frame:
+            prev_bytes = await previous_frame.read()
+            if validate_image(prev_bytes):
+                prev_image = decode_image(prev_bytes)
+        
+        # Run inference with CV features, eye detection, and temporal analysis
         prediction = predict_drowsiness(
             image, 
             conf_threshold=0.25,
-            extract_cv_features=extract_cv
+            extract_cv_features=extract_cv,
+            detect_eyes=detect_eyes,
+            use_temporal=use_temporal,
+            previous_frame=prev_image
         )
         
         return JSONResponse(
@@ -97,4 +123,32 @@ async def predict(file: UploadFile = File(...), extract_cv: bool = True):
         raise HTTPException(
             status_code=500,
             detail="Prediction failed. Please try again."
+        )
+
+
+@router.post("/reset-temporal")
+async def reset_temporal():
+    """
+    Reset the temporal analyzer buffer
+    
+    Use this endpoint when starting a new monitoring session
+    to clear historical predictions from previous sessions.
+    
+    Returns:
+        JSON confirmation
+    """
+    try:
+        reset_temporal_analyzer()
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": "Temporal analyzer reset successfully"
+            }
+        )
+    except Exception as e:
+        print(f"Error resetting temporal analyzer: {e}", file=sys.stderr)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to reset temporal analyzer"
         )

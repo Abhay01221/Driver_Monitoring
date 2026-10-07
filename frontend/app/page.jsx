@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Camera from '@/components/Camera';
 import DetectionResult from '@/components/DetectionResult';
-import { predictDrowsiness, testConnection } from '@/lib/api';
+import { predictDrowsiness, testConnection, resetTemporalAnalyzer } from '@/lib/api';
+import { triggerAlert, requestNotificationPermission } from '@/lib/notifications';
 
 // Continuous drowsiness duration required before sounding the alarm.
 const DROWSY_ALARM_SECONDS = 5;
@@ -23,13 +24,16 @@ export default function Home() {
   const drowsySinceRef = useRef(null);
   const isProcessingRef = useRef(false); // prevent overlapping requests in live mode
 
-  // Check backend on mount
+  // Check backend on mount and request notification permissions
   useEffect(() => {
     async function checkBackend() {
       const ok = await testConnection();
       setBackendStatus(ok ? 'connected' : 'disconnected');
     }
     checkBackend();
+    
+    // Request notification permissions
+    requestNotificationPermission();
   }, []);
 
   // --------------- Audio alarm ---------------
@@ -83,7 +87,7 @@ export default function Home() {
   useEffect(() => () => stopAlarm(), [stopAlarm]);
 
   // --------------- Frame handler ---------------
-  const handleCapture = useCallback(async (imageBlob) => {
+  const handleCapture = useCallback(async (imageBlob, previousFrameBlob) => {
     // Skip if already waiting for a response (live mode)
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
@@ -91,7 +95,12 @@ export default function Home() {
     setError(null);
 
     try {
-      const result = await predictDrowsiness(imageBlob);
+      // Send both current and previous frame for optical flow analysis
+      const result = await predictDrowsiness(imageBlob, {
+        previousFrame: previousFrameBlob,
+        extractCv: true,
+        detectEyes: true
+      });
 
       if (result.success && result.prediction) {
         const pred = result.prediction;
@@ -106,12 +115,30 @@ export default function Home() {
           alert: prev.alert + (drowsy ? 0 : 1),
         }));
 
+        // Enhanced alarm logic using temporal analysis
         if (drowsy) {
           const now = Date.now();
           if (drowsySinceRef.current === null) drowsySinceRef.current = now;
           const elapsedSeconds = (now - drowsySinceRef.current) / 1000;
           setDrowsyStreak(Math.floor(elapsedSeconds));
-          if (elapsedSeconds >= DROWSY_ALARM_SECONDS) startAlarm();
+          
+          // Use temporal analysis alert level for more intelligent alarming
+          const temporalLevel = pred.temporal_analysis?.temporal_alert_level || 0;
+          const consecutiveDrowsy = pred.temporal_analysis?.consecutive_drowsy || 0;
+          
+          // Trigger comprehensive alerts based on temporal level
+          if (temporalLevel >= 2) {
+            triggerAlert(temporalLevel, { muteVoice: isAlarming }); // Don't repeat voice if alarm already sounding
+          }
+          
+          // Trigger audio alarm based on temporal alert level:
+          // Level 2 (Warning): 3+ consecutive frames
+          // Level 3 (Danger): 5+ consecutive frames or immediate
+          if (temporalLevel >= 3 || consecutiveDrowsy >= 5) {
+            startAlarm();  // Immediate alarm for danger level
+          } else if (temporalLevel >= 2 || elapsedSeconds >= DROWSY_ALARM_SECONDS) {
+            startAlarm();  // Standard alarm after threshold
+          }
         } else {
           drowsySinceRef.current = null;
           setDrowsyStreak(0);
@@ -137,6 +164,11 @@ export default function Home() {
         setDrowsyStreak(0);
         stopAlarm();
       } else {
+        // Starting new session — reset temporal analyzer
+        resetTemporalAnalyzer().catch(err => {
+          console.warn('Failed to reset temporal analyzer:', err);
+        });
+        
         // Reset stats for new session
         setSessionStats({ total: 0, drowsy: 0, alert: 0 });
         setPrediction(null);
@@ -151,11 +183,26 @@ export default function Home() {
     ? ((sessionStats.drowsy / sessionStats.total) * 100).toFixed(1)
     : '0.0';
 
+  // Get temporal alert level from current prediction
+  const temporalAlertLevel = prediction?.temporal_analysis?.temporal_alert_level || 0;
+  const temporalRecommendation = prediction?.temporal_analysis?.recommendation || '';
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      {/* Drowsiness alarm overlay */}
+      {/* Multi-level alert overlays */}
       {isAlarming && (
         <div className="fixed inset-0 pointer-events-none z-50 border-8 border-red-600 animate-pulse rounded-none" />
+      )}
+      
+      {/* Temporal alert banner (shows even before full alarm) */}
+      {isLive && temporalAlertLevel >= 2 && !isAlarming && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-40 animate-bounce">
+          <div className={`px-6 py-3 rounded-lg shadow-lg font-bold text-white ${
+            temporalAlertLevel >= 3 ? 'bg-red-600' : 'bg-orange-500'
+          }`}>
+            ⚠️ {temporalAlertLevel >= 3 ? 'DANGER' : 'WARNING'}: Drowsiness Detected
+          </div>
+        </div>
       )}
 
       <div className="container mx-auto px-4 py-8 max-w-6xl">

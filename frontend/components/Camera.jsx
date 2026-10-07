@@ -10,6 +10,7 @@ export default function Camera({ onCapture, disabled, isLive, onToggleLive }) {
   const canvasRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const intervalRef = useRef(null);
+  const previousFrameRef = useRef(null); // Store previous frame for optical flow
   const [error, setError] = useState(null);
   const [isReady, setIsReady] = useState(false);
   const [fps, setFps] = useState(0);
@@ -84,7 +85,12 @@ export default function Camera({ onCapture, disabled, isLive, onToggleLive }) {
     canvas.toBlob((blob) => {
       if (blob && onCapture) {
         fpsCounterRef.current += 1;
-        onCapture(blob);
+        
+        // Pass current frame and previous frame to parent
+        onCapture(blob, previousFrameRef.current);
+        
+        // Store current frame as previous for next capture
+        previousFrameRef.current = blob;
       }
     }, 'image/jpeg', 0.8);
   }, [isReady, onCapture]);
