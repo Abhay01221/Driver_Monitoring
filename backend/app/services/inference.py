@@ -2,25 +2,33 @@
 Inference service - handles model predictions
 """
 import numpy as np
-from typing import Dict, List
+from typing import Dict, List, Optional
 from app.models.model import model_manager
 from app.services.image_processing import preprocess_for_yolo
+from app.services.cv_features import extract_all_cv_features, validate_cv_features
 from app.utils.helpers import format_prediction
 
 
-def predict_drowsiness(image: np.ndarray, conf_threshold: float = 0.25) -> Dict:
+def predict_drowsiness(image: np.ndarray, conf_threshold: float = 0.25, 
+                      extract_cv_features: bool = True,
+                      previous_frame: Optional[np.ndarray] = None) -> Dict:
     """
     Run drowsiness detection inference on an image
     
     Args:
         image: Input image (numpy array, BGR from OpenCV)
         conf_threshold: Confidence threshold
+        extract_cv_features: Whether to extract CV features (HOG, Sobel, Optical Flow)
+        previous_frame: Previous frame for optical flow analysis
         
     Returns:
         Prediction results dictionary with:
         - label: Predicted class label
         - confidence: Confidence score
         - status: "drowsy" or "alert"
+        - severity: Risk level
+        - color: Status color
+        - cv_features: CV metadata (if extract_cv_features=True)
         - raw_results: Raw model output (optional)
     """
     # Get loaded model
@@ -58,6 +66,19 @@ def predict_drowsiness(image: np.ndarray, conf_threshold: float = 0.25) -> Dict:
             result.names[i]: float(probs.data[i]) 
             for i in range(len(probs.data))
         }
+        
+        # Extract CV features if requested (Task 6 requirement)
+        if extract_cv_features:
+            try:
+                cv_metadata = extract_all_cv_features(image, previous_frame)
+                cv_validation = validate_cv_features(cv_metadata)
+                
+                prediction['cv_features'] = cv_metadata
+                prediction['cv_validation'] = cv_validation
+            except Exception as e:
+                print(f"CV feature extraction failed: {e}")
+                prediction['cv_features'] = None
+                prediction['cv_validation'] = None
         
     else:
         # Fallback if probs not available

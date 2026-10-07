@@ -17,20 +17,33 @@ except ValueError:
 
 
 @router.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(file: UploadFile = File(...), extract_cv: bool = True):
     """
-    Predict drowsiness from uploaded image
+    Predict drowsiness from uploaded image with optional CV feature extraction
     
     Args:
         file: Uploaded image file (JPEG, PNG)
+        extract_cv: Extract CV features (HOG, Sobel, Optical Flow, Morphology)
         
     Returns:
         JSON with prediction results:
         {
-            "label": "Drowsy" or "Non_Drowsy",
-            "confidence": float (0-1),
-            "status": "drowsy" or "alert",
-            "all_probs": {class_name: probability}
+            "success": true,
+            "prediction": {
+                "label": "Drowsy" or "Alert",
+                "confidence": float (0-1),
+                "status": "drowsy" or "alert",
+                "severity": int (0=safe, 1=warning, 2=danger),
+                "color": "green", "yellow", or "red",
+                "all_probs": {class_name: probability},
+                "cv_features": {
+                    "hog": {...},
+                    "sobel": {...},
+                    "optical_flow": {...},
+                    "morphology": {...}
+                },
+                "cv_validation": {...}
+            }
         }
     """
     # Validate content type
@@ -60,8 +73,12 @@ async def predict(file: UploadFile = File(...)):
         # Decode image
         image = decode_image(file_bytes)
         
-        # Run inference
-        prediction = predict_drowsiness(image, conf_threshold=0.25)
+        # Run inference with CV features
+        prediction = predict_drowsiness(
+            image, 
+            conf_threshold=0.25,
+            extract_cv_features=extract_cv
+        )
         
         return JSONResponse(
             status_code=200,
